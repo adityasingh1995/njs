@@ -8,6 +8,8 @@ global.snooze = (ms) => {
     });
 };
 
+global.nodeEnv = (process.env.NODE_ENV || 'development').toLocaleLowerCase();
+
 process.on('uncaughtException', (err) => {
 	console.error(`Uncaught Exception: ${err.message}\n${err.stack}`);
 	process.exit(1); // eslint-disable-line no-process-exit

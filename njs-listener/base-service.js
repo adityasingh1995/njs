@@ -4,7 +4,7 @@ class BaseService extends BaseModule {
     constructor (name, dependences) {
         super(name, dependences);
         const changeCase = require('change-case');
-        this.$config = require('./config/services/' + changeCase.paramCase(name));
+        this.$config = require(`./config/${nodeEnv}/services/` + changeCase.paramCase(name));
     }
 
     start() {

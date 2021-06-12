@@ -4,7 +4,7 @@ class BaseMiddleware extends BaseModule {
     constructor (name, dependences) {
         super(name, dependences);
         const changeCase = require('change-case');
-        this.$config = require('./config/middlewares/' + changeCase.paramCase(name));
+        this.$config = require(`./config/${nodeEnv}/middlewares/` + changeCase.paramCase(name));
     }
 
     start() {
