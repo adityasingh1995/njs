@@ -12,14 +12,16 @@ class ServerConnection {
 		try {
 			const net = require('net');
 			this.$socket = new net.Socket();
-			await new Promise((resolve, reject) => {
+			await new Promise(async (resolve, reject) => {
 				try {
+					console.log('Connecting to server..');
 					const connectedPromise = new Promise((resolve, reject) => {
 						try {
+							console.log('socket connected');
 							this.$socket.once('connect', resolve);
 						}
-						catch(err) {
-							reject(err);
+						catch(error) {
+							reject(error);
 						}
 					});
 
@@ -32,7 +34,7 @@ class ServerConnection {
 
 					this.$socket.on('error', (error) => {
 						console.error(`Socket Error for endPoint: ${this.$endPoint.host}: ${error.message}\nStack:${error.stack}`);
-						this.$socket.end();
+						this.$socket.destroy();
 						reject(error);
 					});
 
@@ -40,19 +42,21 @@ class ServerConnection {
 
 					await connectedPromise;
 
+					console.log('writing data');
 					this.$socket.write(data, 'utf-8', () => {;
 						this.$socket.end();
+						console.log('Write finished');
 						resolve(true);
 					});
 				}
-				catch(err) {
-					reject(err);
+				catch(error) {
+					reject(error);
 				}
 			});
 		}
 		catch(error) {
 			console.error('Socket Interface startup error', error);
-			throw err;
+			throw error;
 		}
 	}
 
