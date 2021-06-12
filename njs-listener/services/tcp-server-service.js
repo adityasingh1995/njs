@@ -13,7 +13,7 @@ class TcpServerService extends BaseService {
             this.$server = net.createServer((client) => {
                 console.log('client connected');
 
-                client.setEncoding('hex');
+                client.setEncoding('utf-8');
 
                 client.setTimeout(this.$config.clientEndTimeout, () => {
                     console.log('client timeout');
