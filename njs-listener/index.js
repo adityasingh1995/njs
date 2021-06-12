@@ -29,9 +29,6 @@ const offDeath = onDeath(async () => {
 	if(shuttingDown) return;
 	shuttingDown = true;
 
-    if(interval)
-    clearInterval(interval);
-
     if(serverInstance)
         await serverInstance.stop();
 
