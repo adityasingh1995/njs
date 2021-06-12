@@ -9,7 +9,7 @@ class DataGenerator {
             const promises = require('bluebird');
             const n = 49 +  Math.floor(Math.random() * 450);
             let dataPoints = [];
-            for(let i = 0; i < n; i++) {
+            for(let i = 0; i < 2; i++) {
                 dataPoints.push(this._generateSingleData());
             }
 
@@ -40,10 +40,9 @@ class DataGenerator {
             // generate hash
             const dataPointHash = crypto.createHash("sha256")
                 .update(`${dataPoint.name}!${dataPoint.origin}!${dataPoint.destination}`)
-                .digest("hex");
+                .digest('utf-8');
 
             dataPoint['secret_key'] = dataPointHash;
-
             return await this._encrypt(dataPoint);
         }
         catch(error) {
@@ -62,7 +61,7 @@ class DataGenerator {
             } = await import('crypto');
 
             const algorithm = 'aes-256-ctr';
-            const password = Buffer.from(this.$config.password, 'ascii');
+            const password = Buffer.from(this.$config.password, 'utf-8');
 
             const salt = randomBytes(16);
 
@@ -73,7 +72,7 @@ class DataGenerator {
                     if (error) throw reject(error);
                     const cipher = createCipheriv(algorithm, key, iv);
 
-                    let encrypted = cipher.update(JSON.stringify(dataPoint), 'utf8', 'hex');
+                    let encrypted = cipher.update(JSON.stringify(dataPoint), 'utf-8', 'hex');
                     encrypted += cipher.final('hex');
 
                     resolve(encrypted);
