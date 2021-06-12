@@ -2,11 +2,11 @@
 
 process.title = 'njs-emitter';
 
-global.snooze((ms) => {
+global.snooze = (ms) => {
     return new Promise((resolve) => {
         setTimeout(resolve, ms);
     });
-});
+};
 
 global.nodeEnv = (process.env.NODE_ENV || 'development').toLocaleLowerCase();
 
@@ -22,7 +22,7 @@ process.on('unhandledRejection', (reason, location) => {
 
 
 // Define end points
-const config = require(`./config/${nodeEnv}/config.js`).config;
+const config = require(`./config/${nodeEnv}/config.js`);
 const endPoints = config.endPoints;
 
 let shuttingDown = false;
@@ -52,10 +52,12 @@ const offDeath = onDeath(() => {
 
 const ServerConnectionInterface = require('./server-connection');
 const DataGenerator = require('./data-generator.js')
+const dataGenerator = new DataGenerator(config.generator);
 
 const pingServers = async () => {
     try {
-        const data = await dataGenerator.generate()
+        const data = await dataGenerator.generateData()
+        console.log('Generated data', data);
         for(let endPoint of endPoints) {
             try {
                 await endPoint.interface.sendData(data);
@@ -66,18 +68,18 @@ const pingServers = async () => {
         }
     }
     catch(error) {
-        console.error('Ping Server Error', error);
+        console.error('Ping Error', error);
     }
 }
 
 const start = async () => {
     try {
-        const dataGenerator = new DataGenerator();
         for(let endPoint of endPoints) {
             endPoint.interface = new ServerConnectionInterface(endPoint.connection);
         }
 
         interval = setInterval(pingServers, 10000);
+        pingServers();
     }
     catch(error) {
         console.error('Start Error', error);
