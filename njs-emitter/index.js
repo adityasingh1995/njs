@@ -8,6 +8,8 @@ global.snooze((ms) => {
     });
 });
 
+global.nodeEnv = (process.env.NODE_ENV || 'development').toLocaleLowerCase();
+
 process.on('uncaughtException', (err) => {
 	console.error(`Uncaught Exception: ${err.message}\n${err.stack}`);
 	process.exit(1); // eslint-disable-line no-process-exit
@@ -20,7 +22,7 @@ process.on('unhandledRejection', (reason, location) => {
 
 
 // Define end points
-const config = require('./config/config.js').config;
+const config = require(`./config/${nodeEnv}/config.js`).config;
 const endPoints = config.endPoints;
 
 let shuttingDown = false;
