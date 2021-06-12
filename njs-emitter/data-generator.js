@@ -1,19 +1,19 @@
 "use strict";
 class DataGenerator {
-    constructor() {
+    constructor(config) {
         this.$config = config;
     }
 
     async generateData() {
         try {
-            const promises = rrquire('bluebird');
+            const promises = require('bluebird');
             const n = 49 +  Math.floor(Math.random() * 450);
             let dataPoints = [];
             for(let i = 0; i < n; i++) {
                 dataPoints.push(this._generateSingleData());
             }
 
-            dataPoints = promises.all(dataPoints);
+            dataPoints = await promises.all(dataPoints);
             return dataPoints.join('|');
         }
         catch(error) {
@@ -29,14 +29,13 @@ class DataGenerator {
             // Construct data point
             const person = this._fetchRandom(this.$config.people);
             const origin = this._fetchRandom(this.$config.places);
-            const destination = this._fetchRandom(this.config.places, origin);
+            const destination = this._fetchRandom(this.$config.places, origin);
 
             const dataPoint = {
                 'name': person,
                 'origin': origin,
                 'destination': destination
             };
-
 
             // generate hash
             const dataPointHash = crypto.createHash("sha256")
@@ -70,8 +69,8 @@ class DataGenerator {
             const key = createHash("sha256").update(password).update(salt).digest();
 
             return new Promise((resolve, reject) => {
-                randomFill(new Uint8Array(16), (err, iv) => {
-                    if (err) throw reject(err);
+                randomFill(new Uint8Array(16), (error, iv) => {
+                    if (error) throw reject(error);
                     const cipher = createCipheriv(algorithm, key, iv);
 
                     let encrypted = cipher.update(JSON.stringify(dataPoint), 'utf8', 'hex');
@@ -85,6 +84,16 @@ class DataGenerator {
             console.error('DawtaGenerator::_encrypt', error);
             throw error;
         }
+    }
+
+    _fetchRandom(list, alreadySelect) {
+        let chosen;
+        do {
+            let idx = Math.floor(Math.random() * list.length);
+            chosen = list[idx];
+        } while(alreadySelect && alreadySelect === chosen);
+
+        return chosen;
     }
 }
 
