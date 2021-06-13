@@ -10,71 +10,99 @@ class WebserverService extends BaseService {
         try {
             await super.start();
 
-            const express = require("express");
-            const app = express();
-            const session = require("express-session");
-            const MongoDBStore = require("connect-mongodb-session")(session);
-            const router = express.Router();
-            const morgan = require("morgan");
-            const path = require("path");
-            const helmet = require('helmet');
-            const cors = require('cors');
+            // Cache 
+            const redis = require('redis');
+            const promises = require('bluebird');
+            redis.RedisClient.prototype = promises.promisifyAll(redis.RedisClient.prototype);
+            redis.Multi.prototype = promises.promisifyAll(redis.Multi.prototype);
+            const redisClient = redis.createClient(this.$config.redis.port, this.$config.redis.host);
+            redisClient.on('error', this._handleRedisError.bind(this));
+            this.$redisClient = redisClient;
 
+            // Koa
+            const Koa = require('koa');
+            const app = new Koa();
             this.$app = app;
-            app.on('error', this._handleExpressError.bind(this));
+            app.keys = [this.$config.sessionSecretKey];
 
-            const mongoDBstore = new MongoDBStore({
-                "uri": this.$dependencies.MongoService.$uri,
-                "collection": "mySessions"
+            const cookieFieldName = this.$config.cookieName;
+
+            const bodyParser = require('koa-bodyparser');
+            app.use(bodyParser());
+
+            // session
+            app.use(async (ctxt, next) => {
+                const sessionId = ctxt.cookies.get(cookieFieldName, {
+                    'signed': true
+                });
+
+                if(!sessionId) {
+                    await next();
+                    return;
+                }
+
+                let sessionData = await redisClient.getAsync(sessionId);
+
+                if(!sessionData) {
+                    ctxt.cookies.set(cookieFieldName);
+                    await next();
+                    return;
+                }
+
+                sessionData = JSON.parse(sessionData);
+
+                let user = await knex.raw('SELECT id, user_name, name FROM users WHERE id = ?', [sessionData.user_id]);
+                user = user.rows.length ? user.rows.shift() : null;
+
+                if(!user){
+                    redisClient.del(sessionId);
+                    ctxt.cookies.set(cookieFieldName);
+                    await next();
+                    return;
+                }
+
+                await redisClient.setexAsync(sessionId, (this.$config.maxAge), JSON.stringify(sessionData));
+
+                ctxt.cookies.set(cookieFieldName, sessionId, {
+                    'maxAge': (this.$config.maxAge),
+                    'signed': true,
+                    'secure': false,
+                    'httpOnly': true,
+                    'overwrite': true	
+                });
+
+                ctxt.state.user = user;
+                await next();
             });
 
-            this.$mongoStore = mongoDBstore;
-            mongoDBstore.on('error', this._handleMongoError.bind(this));
+            const Router = require('koa-router');
+            const router = new Router();
 
-            app.use(express.urlencoded({ extended: false }));
-            app.use(express.json());
+            const send = require('koa-send');
+            router.get('/public', async (ctxt, next) => {
+                console.log('hit');
+                const path = require('path');
+                const root = path.join(path.dirname(__dirname), 'frontend/public');
+                console.log(root, ctxt.path);
+                const filePath = path.relative('/public', ctxt.path);
 
-            app.use(morgan("dev"));
-
-            app.use(
-                session({
-                    name: this.$config.cookieName, 
-                    secret: this.$config.sesionSecretKey,
-                    resave: true,
-                    saveUninitialized: false,
-                    store: mongoDBstore,
-                    cookie: {
-                    maxAge: this.$config.maxAge,
-                    sameSite: false,
-                    secure: (nodeEnv === 'production')
-                    }
-                })
-            );
-
-            app.use(helmet());
-
-            const corsOptions = {
-                origin: (nodeEnv === 'production') ? 'http://localhost' : 'http://localhost:3000',
-                credentials: true,
-                optionsSuccessStatus: 200
-            };
-
-            app.use(cors(corsOptions));
-
-            /*
-            router.get("/", (req, res) => res.send("hello"));
-
-            const routes = require('../components');
-            for(route of routes) {
-                app.use(route.path, route.router);
-            }
-
-            */
-            //app.use("/api/users", require("./routes/users"));
-            this.$server = app.listen(this.$config.port, () => {
-                console.log(`${this.$name}:: listening on http://${this.$config.host}:${this.$config.port}`);
+                if(!filePath) {
+                    ctxt.throw(404, 'No Path Specified');
+                    return;
+                }
+                await send(ctxt, filePath, { root: root});
             });
 
+            app.use(router.routes()).use(router.allowedMethods());
+
+            this.$server = app.listen(this.$config.port);
+            const serverDestroy = require('server-destroy');
+            serverDestroy(this.$server);
+
+			this.$app.on('error', this._handleKoaError.bind(this));
+			this.$server.on('error', this._handleServerError.bind(this));
+
+            console.log(`${this.$name}::listening on `, this.$config.port);
         }
         catch(error) {
             console.error(`${this.$name}::start:`, error);
@@ -84,21 +112,14 @@ class WebserverService extends BaseService {
 
     async stop() {
         try {
-            if(this.$mongoStore) {
-                await this.$mongoStore.destroy();
-                delete this.$mongoStore;
+            if(this.$redisClient) {
+                await this.$redisClient.quitAsync()
+                this.$redisClient.end(true);
+                delete this.$redisClient;
             }
 
             if(this.$server) {
-                await new Promise ((resolve, reject) => {
-                    try {
-                        setTimeout(resolve, 5000);
-                        this.$server.close(resolve);
-                    }
-                    catch(err) {
-                        reject(err);
-                    }
-                });
+                this.$server.destroyAsync();
                 delete this.$server;
             }
 
@@ -111,9 +132,10 @@ class WebserverService extends BaseService {
         }
     }
 
-    async addRoutes(route) {
+    async addRoutes(router) {
         try {
-            this.$app.use(route.path, route.router);
+            this.$app.use(router.routes());
+            this.$app.user(router.allowedMethods());
         }
         catch(error) {
             console.error(`${this.$name}::addRoutes`, error);
@@ -121,13 +143,18 @@ class WebserverService extends BaseService {
         }
     }
 
-    _handleMongoError(error) {
-        console.error(`${this.$name}::_handleMongoError`, error);
+    _handleKoaError(error) {
+        console.error(`${this.name}::_handleKoaError`, error);
         this.emit('error', error);
     }
 
-    _handleExpressError(error) {
-        console.error(`${this.$name}::_handleExpressError`, error);
+    _handleServerError(error) {
+        console.error(`${this.name}::_handleServerError`, error);
+        this.emit('error', error);
+    }
+
+    _handleRedisError(error) {
+        console.error(`${this.name}::_handleRedisError`, error);
         this.emit('error', error);
     }
 };
@@ -135,8 +162,5 @@ class WebserverService extends BaseService {
 module.exports = {
     'name': 'WebserverService',
     'create': WebserverService,
-    'dependencies': [{
-        'type': 'service',
-        'name': 'MongoService'
-    }]
+    'dependencies': []
 }
