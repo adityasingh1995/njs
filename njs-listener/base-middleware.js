@@ -7,12 +7,12 @@ class BaseMiddleware extends BaseModule {
         this.$config = require(`./config/${nodeEnv}/middlewares/` + changeCase.paramCase(name));
     }
 
-    start() {
-        super.start();
+    async start() {
+        await super.start();
     }
 
-    stop() {
-        super.stop();
+    async stop() {
+        await super.stop();
     }
 }
 
