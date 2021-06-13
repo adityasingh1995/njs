@@ -54,30 +54,27 @@ class DataGenerator {
     async _encrypt(dataPoint) {
         try {
             const {
-                randomFill,
                 createCipheriv,
-                randomBytes,
                 createHash
             } = await import('crypto');
 
+            console.log('encrypting', dataPoint);
+
             const algorithm = 'aes-256-ctr';
             const password = Buffer.from(this.$config.password, 'utf-8');
-
-            const salt = randomBytes(16);
-
+            const salt = Buffer.from(this.$config.salt, 'utf-8');
             const key = createHash("sha256").update(password).update(salt).digest();
 
-            return new Promise((resolve, reject) => {
-                randomFill(new Uint8Array(16), (error, iv) => {
-                    if (error) throw reject(error);
-                    const cipher = createCipheriv(algorithm, key, iv);
+            const resivedIv = Buffer.allocUnsafe(16);
+            const iv = createHash("sha256").update(this.$config.iv).digest();
+            iv.copy(resivedIv);
 
-                    let encrypted = cipher.update(JSON.stringify(dataPoint), 'utf-8', 'hex');
-                    encrypted += cipher.final('hex');
+            const cipher = createCipheriv(algorithm, key, resivedIv);
+            let encrypted = cipher.update(JSON.stringify(dataPoint), 'utf-8', 'hex');
 
-                    resolve(encrypted);
-                });
-            });
+            encrypted += cipher.final('hex');
+
+            return encrypted;
         }
         catch(error) {
             console.error('DawtaGenerator::_encrypt', error);
