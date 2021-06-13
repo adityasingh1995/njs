@@ -46,7 +46,7 @@ class ApplicationServer extends BaseModule {
             const loadedDeps = {};
 
             for(let dep of serviceToLoad.dependencies) {
-                this._loadService(require('./services')[dep.name]);
+                await this._loadService(require('./services')[dep.name]);
                 loadedDeps[dep.name] = this.$services[dep.name];
             }
 
@@ -55,7 +55,7 @@ class ApplicationServer extends BaseModule {
             this.$loadOrder.push(this.$services[serviceToLoad.name])
 
             await this.$services[serviceToLoad.name].start();
-
+            console.log(`${serviceToLoad.name}::started`)
         }
         catch(error) {
             console.error('ApplicationServer::_loadService', error)
@@ -75,7 +75,7 @@ class ApplicationServer extends BaseModule {
 
             for(let dep of middlewareToLoad.dependencies) {
                 if(dep.type === 'middleware') {
-                    this._loadMiddleware(require('./middlewares')[dep.name]);
+                    await this._loadMiddleware(require('./middlewares')[dep.name]);
                     loadedDeps[dep.name] = this.$middlewares[dep.name];
                 }
 
@@ -89,6 +89,7 @@ class ApplicationServer extends BaseModule {
             this.$loadOrder.push(this.$middlewares[middlewareToLoad.name]);
 
             await this.$middlewares[middlewareToLoad.name].start();
+            console.log(`${middlewareToLoad.name}::started`)
         }
         catch(error) {
             console.error('ApplicationServer::_loadMiddleware', error)
