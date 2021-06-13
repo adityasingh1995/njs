@@ -9,10 +9,7 @@ class DataProcessor extends BaseMiddleware {
     async start() {
         try {
             await super.start();
-
-            await new Promise((resolve, reject) => {
-                setTimeout(resolve, 1500);
-            });
+            await this.$dependencies.RabbitmqService.subscribe('INCOMING', this._handleIncomingData.bind(this));
         }
         catch(error) {
             console.error(`${this.$name}::start:`, error);
@@ -22,14 +19,97 @@ class DataProcessor extends BaseMiddleware {
 
     async stop() {
         try {
-            await new Promise((resolve, reject) => {
-                setTimeout(resolve, 1500);
-            });
-
+            await this.$dependencies.RabbitmqService.unsubscribe('INCOMING', this._handleIncomingData.bind(this));
             await super.stop();
         }
         catch(error) {
             console.error(`${this.$name}::stop:`, error);
+            throw error;
+        }
+    }
+
+    async _handleIncomingData(topic, encryptedData) {
+        try {
+            const promises = require('bluebird');
+            const dataPointList = encryptedData.split('|');
+            let decryptedData = [];
+
+            for(let i = 0; i < dataPointList.length; i++) {
+                decryptedData.push(this._decrypt(dataPointList[i]));
+            }
+
+            decryptedData = await promises.all(decryptedData);
+
+            decryptedData = decryptedData.filter((d) => {
+                return d !== null;
+            });
+
+            console.log(`got data ${topic} data`, decryptedData);
+        }
+        catch(error) {
+            console.error(`${this.$name}::_handleIncomingData`, error);
+            throw error;
+        }
+    }
+
+    async _decrypt(encryptedData) {
+        try {
+            const {
+                createDecipheriv,
+                createHash
+            } = await import('crypto');
+
+            const algorithm = 'aes-256-ctr';
+            const password = Buffer.from(this.$config.password, 'utf-8');
+            const salt = Buffer.from(this.$config.salt, 'utf-8');
+            const key = createHash("sha256").update(password).update(salt).digest();
+
+            const resizedIv = Buffer.allocUnsafe(16);
+            const iv = createHash("sha256").update(this.$config.iv).digest();
+            iv.copy(resizedIv);
+
+            const decipher = createDecipheriv(algorithm, key, resizedIv);
+            let decrypted = decipher.update(encryptedData, 'hex', 'utf-8');
+
+            decrypted += decipher.final('utf-8');
+
+            decrypted = await this._checkIntegrity(decrypted);
+            return decrypted;
+        }
+        catch(error) {
+            console.error(`${this.$name}::_decrypt`, error)
+            return null;
+        }
+    }
+
+    async _checkIntegrity(decrypted) {
+        try {
+            const parsedData = JSON.parse(decrypted);
+
+            if(typeof parsedData !== 'object')
+                return null;
+
+            if(!parsedData['secret_key'])
+                return null;
+
+            if(!parsedData['name'] || !parsedData['origin'] || !parsedData['destination'])
+                return null;
+
+            const {
+                createHash
+            } = await import('crypto');
+
+            const generatedHash = createHash("sha256")
+                .update(`${parsedData.name}!${parsedData.origin}!${parsedData.destination}`)
+                .digest('utf-8');
+
+            if(generatedHash === parsedData.secret_key)
+                return parsedData;
+
+            return null;
+        }
+        catch(error) {
+            console.error(`${this.name}::_checkIntegriy`, error);
             throw error;
         }
     }
@@ -39,9 +119,6 @@ module.exports = {
     'name': 'DataProcessor',
     'create': DataProcessor,
     'dependencies': [{
-        'name': 'TcpServerService',
-        'type': 'service'
-    }, {
         'name': 'MongoService',
         'type': 'service',
     }, {
