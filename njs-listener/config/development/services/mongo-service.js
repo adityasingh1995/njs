@@ -1,1 +1,8 @@
-module.exports = {};
+module.exports = {
+    'host': '127.0.0.1',
+    'port': 27017,
+    'pool': 20,
+    'user': 'aditya',
+    'password': 'aditya',
+    'dbName': 'njs'
+};
