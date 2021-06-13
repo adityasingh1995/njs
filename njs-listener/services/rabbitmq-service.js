@@ -8,6 +8,7 @@ class RabbitmqService extends BaseService {
 
     async start() {
         try {
+            await super.start();
             const AMQPLib = require('amqplib');
 
             const connection = await AMQPLib.connect(this.$config);
@@ -123,7 +124,6 @@ class RabbitmqService extends BaseService {
 
 	async unsubscribe(topic, listener) {
 		try {
-            // TODO: AMQPLib Client
             if(this.$listener['subscribers'] && this.$listener['subscribers'][topic]) {
                 const channel = this.$listener['subscribe_client'];
 
