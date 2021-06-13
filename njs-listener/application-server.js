@@ -6,6 +6,8 @@ class ApplicationServer extends BaseModule {
         super('NJS-Listener', null);
         this.$services = {};
         this.$middlewares = {};
+        this.$components = {};
+
         this.$loadOrder = [];
         this.errored = false;
     }
@@ -27,6 +29,14 @@ class ApplicationServer extends BaseModule {
 
             for(let middleware of middlewaresNames) {
                 this._loadMiddleware(middlewares[middleware]);
+            }
+
+            // load Components 
+            const components = require('./components');
+            const componentsNames = Object.keys(components);
+
+            for(let component of componentsNames) {
+                this._loadComponent(components[component]);
             }
         }
         catch(error) {
@@ -97,6 +107,40 @@ class ApplicationServer extends BaseModule {
         }
     }
 
+    async _loadComponent(componentToLoad) {
+        try {
+            if(this.errored)
+                return;
+
+            if(!this.$services['WebserverService'])
+                return;
+
+            const loadedDeps = {};
+
+            for(let dep of componentToLoad.dependencies) {
+                if(dep.type === 'middleware') {
+                    loadedDeps[dep.name] = this.$middlewares[dep.name];
+                }
+
+                if(dep.type === 'service') {
+                    loadedDeps[dep.name] = this.$services[dep.name];
+                }
+            }
+
+            this.$components[componentToLoad.name] = new componentToLoad.create(loadedDeps);
+            this.$components[componentToLoad.name].on('error', this._onComponentError.bind(this, componentToLoad.name));
+            this.$loadOrder.push(this.$components[componentToLoad.name]);
+
+            const routes = await this.$components[componentToLoad.name].getRoutes();
+            this.$services['WebserverService'].addRoutes(routes);
+            console.log(`${componentToLoad.name}::started`);
+        }
+        catch(error) {
+            console.error('ApplicationServer::_loadComponents', error)
+            throw error;
+        }
+    }
+
     async stop() {
         try {
             while(this.$loadOrder.length) {
@@ -126,6 +170,12 @@ class ApplicationServer extends BaseModule {
     _onMiddlewareError(name, error) {
         this.errored = true;
         console.error(`middleware error${name}`, error);
+        this.emit('error', error);
+    }
+
+    _onComponentError(name, error) {
+        this.errored = true;
+        console.error(`component error${name}`, error);
         this.emit('error', error);
     }
 }

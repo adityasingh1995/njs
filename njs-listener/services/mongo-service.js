@@ -12,7 +12,7 @@ class MongoService extends BaseService {
 
             const { MongoClient } = require("mongodb");
             const uri = `mongodb://${this.$config.user}:${this.$config.password}@${this.$config.host}:${this.$config.port}/?poolSize=${this.$config.pool}&writeConcern=majority`;
-
+            this.$uri = uri;
             const client = new MongoClient(uri);
             this.$client = client;
 
