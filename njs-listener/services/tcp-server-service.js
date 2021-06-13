@@ -97,7 +97,7 @@ class TcpServerService extends BaseService {
 
     async _handleIncomingData(data) {
         try {
-            console.log('got data', data);
+            await this.$dependencies.RabbitmqService.publish('INCOMING', data);
         }
         catch(error) {
             console.error(`${this.$name}::_handleIncomingData`, error);
