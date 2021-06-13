@@ -1,6 +1,8 @@
 "use strict";
 const BaseMiddleware = require('../base-middleware');
-
+const moment = require('moment');
+const { reject } = require('bluebird');
+const { resolve } = require('path');
 class DataProcessor extends BaseMiddleware {
     constructor(dependencies) {
         super('DataProcessor', dependencies);
@@ -44,10 +46,54 @@ class DataProcessor extends BaseMiddleware {
                 return d !== null;
             });
 
-            console.log(`got data ${topic} data`, decryptedData);
+            for(let i = 0; i < decryptedData.length; i++) {
+                await promises.all([
+                    this._persistData(decryptedData[i]),
+                    this._publishToFrontend(decryptedData[i])
+                ]);
+            }
         }
         catch(error) {
             console.error(`${this.$name}::_handleIncomingData`, error);
+            throw error;
+        }
+    }
+
+    async _persistData(data) {
+        try {
+            const db = this.$dependencies.MongoService.$db;
+            const currentTime = moment();
+            data['timestamp'] = moment().format();
+            const minuteTime = currentTime.clone().seconds(0).milliseconds(0).valueOf();
+            const name = data.name;
+
+            const tripsCollection = db.collection('trips');
+
+            let alreadyExistingDocument = await tripsCollection.find({
+                'name': name,
+                'time': minuteTime
+            }).toArray();
+
+            if(!alreadyExistingDocument || !alreadyExistingDocument.length) {
+                await tripsCollection.insertOne({
+                    'name': name,
+                    'time': minuteTime,
+                    'stream': [data]
+                });
+            }
+            else {
+                await tripsCollection.updateOne({
+                    'name': name,
+                    'time': minuteTime
+                }, {
+                    $push: {
+                        'stream': data
+                    }
+                });
+            }
+        }
+        catch(err) {
+            console.error(`${this.$name}::_persistData`, error);
             throw error;
         }
     }
@@ -111,6 +157,15 @@ class DataProcessor extends BaseMiddleware {
         catch(error) {
             console.error(`${this.name}::_checkIntegriy`, error);
             throw error;
+        }
+    }
+
+    async _publishToFrontend(data) {
+        try {
+            console.log('publishing', data);
+        }
+        catch(error) {
+            console.error(`${this.name}::_publishToFrontend`, error);
         }
     }
 };
