@@ -10,9 +10,16 @@ class MongoService extends BaseService {
         try {
             await super.start();
 
-            await new Promise((resolve, reject) => {
-                setTimeout(resolve, 1500);
-            });
+            const { MongoClient } = require("mongodb");
+            const uri = `mongodb://${this.$config.user}:${this.$config.password}@${this.$config.host}:${this.$config.port}/?poolSize=${this.$config.pool}&writeConcern=majority`;
+            
+            const client = new MongoClient(uri);
+            this.$client = client;
+
+            client.on('error', this._handleMongoError.bind(this));
+            await client.connect();
+
+            this.$db = this.$client.db(this.$config.dbName);
         }
         catch(error) {
             console.error(`${this.$name}::start:`, error);
@@ -22,10 +29,11 @@ class MongoService extends BaseService {
 
     async stop() {
         try {
-            await new Promise((resolve, reject) => {
-                setTimeout(resolve, 1500);
-            });
-
+            if(this.$client) {
+                await this.$client.close();
+                delete this.$client;
+            }
+            
             await super.stop();
         }
         catch(error) {
@@ -33,10 +41,15 @@ class MongoService extends BaseService {
             throw error;
         }
     }
+
+    _handleMongoError(error) {
+        console.error(`${this.$name}::_handleMongoError`, error);
+        this.emit('error', error);
+    }
 };
 
 module.exports = {
-    'name': 'MongoServiceProcessor',
+    'name': 'MongoService',
     'create': MongoService,
     'dependencies': []
 }
