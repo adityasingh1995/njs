@@ -9,7 +9,7 @@ class DataGenerator {
             const promises = require('bluebird');
             const n = 49 +  Math.floor(Math.random() * 450);
             let dataPoints = [];
-            for(let i = 0; i < 2; i++) {
+            for(let i = 0; i < n; i++) {
                 dataPoints.push(this._generateSingleData());
             }
 
