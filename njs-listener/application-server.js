@@ -28,7 +28,7 @@ class ApplicationServer extends BaseModule {
             const middlewaresNames = Object.keys(middlewares);
 
             for(let middleware of middlewaresNames) {
-                this._loadMiddleware(middlewares[middleware]);
+                await this._loadMiddleware(middlewares[middleware]);
             }
 
             // load Components 
@@ -36,7 +36,7 @@ class ApplicationServer extends BaseModule {
             const componentsNames = Object.keys(components);
 
             for(let component of componentsNames) {
-                this._loadComponent(components[component]);
+                await this._loadComponent(components[component]);
             }
         }
         catch(error) {

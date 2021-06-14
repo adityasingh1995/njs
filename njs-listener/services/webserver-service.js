@@ -9,15 +9,8 @@ class WebserverService extends BaseService {
     async start() {
         try {
             await super.start();
-
-            // Cache 
-            const redis = require('redis');
-            const promises = require('bluebird');
-            redis.RedisClient.prototype = promises.promisifyAll(redis.RedisClient.prototype);
-            redis.Multi.prototype = promises.promisifyAll(redis.Multi.prototype);
-            const redisClient = redis.createClient(this.$config.redis.port, this.$config.redis.host);
-            redisClient.on('error', this._handleRedisError.bind(this));
-            this.$redisClient = redisClient;
+            const redisClient = this.$dependencies.CacheService.$redisClient;
+            const knex = this.$dependencies.DatabaseService.$knex;
 
             // Koa
             const Koa = require('koa');
@@ -25,8 +18,16 @@ class WebserverService extends BaseService {
             this.$app = app;
             app.keys = [this.$config.sessionSecretKey];
 
-            const cookieFieldName = this.$config.cookieName;
+            // static
+            const staticFiles = new Koa();
+            const path = require('path');
+            const serve = require('koa-static');
+            const mount = require("koa-mount");
 
+            staticFiles.use(serve(path.join(path.dirname(__dirname), "/frontend"))); //serve the build directory
+            app.use(mount("/", staticFiles));
+           
+            const cookieFieldName = this.$config.cookieName;
             const bodyParser = require('koa-bodyparser');
             app.use(bodyParser());
 
@@ -75,10 +76,13 @@ class WebserverService extends BaseService {
                 await next();
             });
 
+
+            //serve static files
+            /*
             const Router = require('koa-router');
             const router = new Router();
-
             const send = require('koa-send');
+
             router.get('/public', async (ctxt, next) => {
                 console.log('hit');
                 const path = require('path');
@@ -93,10 +97,19 @@ class WebserverService extends BaseService {
                 await send(ctxt, filePath, { root: root});
             });
 
-            app.use(router.routes()).use(router.allowedMethods());
+            router.get('/', async (ctxt, next) => {
+                await send(ctxt, '../frontend/index.html');
+            });
 
-            this.$server = app.listen(this.$config.port);
+            app.use(router.routes()).use(router.allowedMethods());
+            */
+
+            // listen
             const serverDestroy = require('server-destroy');
+            const http = require('http');
+
+            this.$server = http.createServer(app.callback());
+            this.$server.listen(this.$config.port);
             serverDestroy(this.$server);
 
 			this.$app.on('error', this._handleKoaError.bind(this));
@@ -112,14 +125,8 @@ class WebserverService extends BaseService {
 
     async stop() {
         try {
-            if(this.$redisClient) {
-                await this.$redisClient.quitAsync()
-                this.$redisClient.end(true);
-                delete this.$redisClient;
-            }
-
             if(this.$server) {
-                this.$server.destroyAsync();
+                this.$server.destroy();
                 delete this.$server;
             }
 
@@ -135,7 +142,7 @@ class WebserverService extends BaseService {
     async addRoutes(router) {
         try {
             this.$app.use(router.routes());
-            this.$app.user(router.allowedMethods());
+            this.$app.use(router.allowedMethods());
         }
         catch(error) {
             console.error(`${this.$name}::addRoutes`, error);
@@ -145,16 +152,10 @@ class WebserverService extends BaseService {
 
     _handleKoaError(error) {
         console.error(`${this.name}::_handleKoaError`, error);
-        this.emit('error', error);
     }
 
     _handleServerError(error) {
         console.error(`${this.name}::_handleServerError`, error);
-        this.emit('error', error);
-    }
-
-    _handleRedisError(error) {
-        console.error(`${this.name}::_handleRedisError`, error);
         this.emit('error', error);
     }
 };
@@ -162,5 +163,11 @@ class WebserverService extends BaseService {
 module.exports = {
     'name': 'WebserverService',
     'create': WebserverService,
-    'dependencies': []
+    'dependencies': [{
+        'type': 'service',
+        'name': 'CacheService'
+    }, {
+        'type': 'service',
+        'name': 'DatabaseService'
+    }]
 }

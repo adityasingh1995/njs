@@ -9,7 +9,7 @@ class DatabaseService extends BaseService {
 
     async start() {
         try {
-			await super._setup();
+			await super.start();
 
 			this.$config.debug = (this.$config.debug === true);
 			if(this.$config.connection)
